@@ -240,18 +240,9 @@
 
     detectionLocked = true;
 
-    if (Number.isInteger(expected) && scannedPoint !== expected) {
-      setMessage(
-        'Point ' + scannedPoint +
-        ' detected. Sending scan to patrol system for audit...',
-        'warn'
-      );
-    } else {
-      setMessage(
-        'Checkpoint detected. Returning to patrol verification...',
-        'ok'
-      );
-    }
+    // Keep the guard-facing scanner simple.
+    // Sequence and audit decisions are handled by Apps Script.
+    setMessage('Processing checkpoint...', 'ok');
 
     await stopScanner();
 
