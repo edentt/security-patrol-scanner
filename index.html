@@ -233,18 +233,6 @@
       return;
     }
 
-    if (Number.isInteger(expected) && scannedPoint !== expected) {
-      setMessage(
-        'Wrong checkpoint scanned. Expected Point ' +
-        expected +
-        ', but Point ' +
-        scannedPoint +
-        ' was detected. Scan the required checkpoint.',
-        'warn'
-      );
-      return;
-    }
-
     if (!returnUrl) {
       showError('Patrol return address is missing.');
       return;
@@ -252,15 +240,25 @@
 
     detectionLocked = true;
 
-    setMessage(
-      'Checkpoint detected. Returning to patrol verification...',
-      'ok'
-    );
+    if (Number.isInteger(expected) && scannedPoint !== expected) {
+      setMessage(
+        'Point ' + scannedPoint +
+        ' detected. Sending scan to patrol system for audit...',
+        'warn'
+      );
+    } else {
+      setMessage(
+        'Checkpoint detected. Returning to patrol verification...',
+        'ok'
+      );
+    }
 
     await stopScanner();
 
-    // Only the point number is taken from the scanned QR.
-    // The QR's own destination is never opened.
+    // Any valid patrol checkpoint is returned to Apps Script.
+    // Apps Script decides whether it is ACCEPTED, DUPLICATE, or SKIPPED,
+    // and records the event in Patrol_Log.
+    // The scanned QR's own destination is never opened.
     window.location.href =
       returnUrl +
       '?point=' +
