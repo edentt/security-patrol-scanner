@@ -127,7 +127,7 @@
 
     <button id="retryButton"
             class="hidden"
-            onclick="retryScannerWithVoice()">
+            onclick="startScanner()">
       TRY CAMERA AGAIN
     </button>
 
@@ -149,7 +149,6 @@
   const expected = Number(params.get('expected'));
   const expectedName = params.get('name') || '';
   const returnUrl = params.get('return') || '';
-  const voiceEnabled = params.get('voice') !== '0';
 
   let scanner = null;
   let scannerRunning = false;
@@ -161,83 +160,6 @@
   document.getElementById('expectedName').textContent = expectedName;
 
   window.addEventListener('load', startScanner);
-
-
-  function scannerVoiceSupported() {
-    return (
-      voiceEnabled &&
-      'speechSynthesis' in window &&
-      'SpeechSynthesisUtterance' in window
-    );
-  }
-
-
-  function speakScanner(text, waitForFinish) {
-    return new Promise(function(resolve) {
-      if (!scannerVoiceSupported() || !text) {
-        resolve();
-        return;
-      }
-
-      try {
-        window.speechSynthesis.cancel();
-        window.speechSynthesis.resume();
-
-        const utterance =
-          new SpeechSynthesisUtterance(String(text));
-
-        utterance.lang = 'en-MY';
-        utterance.rate = 0.95;
-        utterance.pitch = 1;
-        utterance.volume = 1;
-
-        const voices = window.speechSynthesis.getVoices();
-
-        const preferredVoice =
-          voices.find(function(voice) {
-            return String(voice.lang || '').toLowerCase() === 'en-my';
-          }) ||
-          voices.find(function(voice) {
-            return String(voice.lang || '').toLowerCase().indexOf('en-gb') === 0;
-          }) ||
-          voices.find(function(voice) {
-            return String(voice.lang || '').toLowerCase().indexOf('en') === 0;
-          });
-
-        if (preferredVoice) {
-          utterance.voice = preferredVoice;
-        }
-
-        let finished = false;
-
-        function done() {
-          if (finished) return;
-          finished = true;
-          resolve();
-        }
-
-        utterance.onend = done;
-        utterance.onerror = done;
-
-        window.speechSynthesis.speak(utterance);
-
-        if (!waitForFinish) {
-          setTimeout(done, 150);
-        } else {
-          setTimeout(done, 1400);
-        }
-
-      } catch (ignored) {
-        resolve();
-      }
-    });
-  }
-
-
-  async function retryScannerWithVoice() {
-    await speakScanner('Scanning checkpoint.', false);
-    startScanner();
-  }
 
 
   async function startScanner() {
@@ -318,28 +240,41 @@
 
     detectionLocked = true;
 
-    // Keep the guard-facing scanner simple.
-    // Sequence and audit decisions are handled by Apps Script.
-    setMessage('Checkpoint scanned. Verifying checkpoint...', 'ok');
+    // Keep the Guard page alive. It owns GPS, server verification and voice.
+    setMessage('Checkpoint scanned. Returning to patrol...', 'ok');
 
     await stopScanner();
 
-    // Speak before navigation so the browser has time to finish the phrase.
-    await speakScanner(
-      'Checkpoint scanned. Verifying checkpoint.',
-      true
-    );
+    if (window.opener && !window.opener.closed) {
+      try {
+        window.opener.postMessage(
+          {
+            type: 'PATROL_QR_SCANNED',
+            point: scannedPoint
+          },
+          '*'
+        );
 
-    // Any valid patrol checkpoint is returned to Apps Script.
-    // Apps Script decides whether it is ACCEPTED, DUPLICATE, or SKIPPED,
-    // and records the event in Patrol_Log.
-    // The scanned QR's own destination is never opened.
+        try {
+          window.opener.focus();
+        } catch (ignored) {}
+
+        setTimeout(function() {
+          try {
+            window.close();
+          } catch (ignored) {}
+        }, 150);
+
+        return;
+
+      } catch (ignored) {}
+    }
+
+    // Fallback if opener communication is unavailable.
     window.location.href =
       returnUrl +
       '?point=' +
-      encodeURIComponent(scannedPoint) +
-      '&voice=' +
-      encodeURIComponent(voiceEnabled ? '1' : '0');
+      encodeURIComponent(scannedPoint);
   }
 
 
