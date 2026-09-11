@@ -127,7 +127,7 @@
 
     <button id="retryButton"
             class="hidden"
-            onclick="startScanner()">
+            onclick="retryScannerWithVoice()">
       TRY CAMERA AGAIN
     </button>
 
@@ -149,6 +149,7 @@
   const expected = Number(params.get('expected'));
   const expectedName = params.get('name') || '';
   const returnUrl = params.get('return') || '';
+  const voiceEnabled = params.get('voice') !== '0';
 
   let scanner = null;
   let scannerRunning = false;
@@ -160,6 +161,83 @@
   document.getElementById('expectedName').textContent = expectedName;
 
   window.addEventListener('load', startScanner);
+
+
+  function scannerVoiceSupported() {
+    return (
+      voiceEnabled &&
+      'speechSynthesis' in window &&
+      'SpeechSynthesisUtterance' in window
+    );
+  }
+
+
+  function speakScanner(text, waitForFinish) {
+    return new Promise(function(resolve) {
+      if (!scannerVoiceSupported() || !text) {
+        resolve();
+        return;
+      }
+
+      try {
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.resume();
+
+        const utterance =
+          new SpeechSynthesisUtterance(String(text));
+
+        utterance.lang = 'en-MY';
+        utterance.rate = 0.95;
+        utterance.pitch = 1;
+        utterance.volume = 1;
+
+        const voices = window.speechSynthesis.getVoices();
+
+        const preferredVoice =
+          voices.find(function(voice) {
+            return String(voice.lang || '').toLowerCase() === 'en-my';
+          }) ||
+          voices.find(function(voice) {
+            return String(voice.lang || '').toLowerCase().indexOf('en-gb') === 0;
+          }) ||
+          voices.find(function(voice) {
+            return String(voice.lang || '').toLowerCase().indexOf('en') === 0;
+          });
+
+        if (preferredVoice) {
+          utterance.voice = preferredVoice;
+        }
+
+        let finished = false;
+
+        function done() {
+          if (finished) return;
+          finished = true;
+          resolve();
+        }
+
+        utterance.onend = done;
+        utterance.onerror = done;
+
+        window.speechSynthesis.speak(utterance);
+
+        if (!waitForFinish) {
+          setTimeout(done, 150);
+        } else {
+          setTimeout(done, 1400);
+        }
+
+      } catch (ignored) {
+        resolve();
+      }
+    });
+  }
+
+
+  async function retryScannerWithVoice() {
+    await speakScanner('Scanning checkpoint.', false);
+    startScanner();
+  }
 
 
   async function startScanner() {
@@ -242,9 +320,15 @@
 
     // Keep the guard-facing scanner simple.
     // Sequence and audit decisions are handled by Apps Script.
-    setMessage('Processing checkpoint...', 'ok');
+    setMessage('Checkpoint scanned. Verifying checkpoint...', 'ok');
 
     await stopScanner();
+
+    // Speak before navigation so the browser has time to finish the phrase.
+    await speakScanner(
+      'Checkpoint scanned. Verifying checkpoint.',
+      true
+    );
 
     // Any valid patrol checkpoint is returned to Apps Script.
     // Apps Script decides whether it is ACCEPTED, DUPLICATE, or SKIPPED,
@@ -253,7 +337,9 @@
     window.location.href =
       returnUrl +
       '?point=' +
-      encodeURIComponent(scannedPoint);
+      encodeURIComponent(scannedPoint) +
+      '&voice=' +
+      encodeURIComponent(voiceEnabled ? '1' : '0');
   }
 
 
