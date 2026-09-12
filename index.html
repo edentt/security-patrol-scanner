@@ -149,6 +149,7 @@
   const expected = Number(params.get('expected'));
   const expectedName = params.get('name') || '';
   const returnUrl = params.get('return') || '';
+  const voiceEnabled = params.get('voice') !== '0';
 
   let scanner = null;
   let scannerRunning = false;
@@ -160,6 +161,58 @@
   document.getElementById('expectedName').textContent = expectedName;
 
   window.addEventListener('load', startScanner);
+
+
+  function scannerVoiceSupported() {
+    return (
+      voiceEnabled &&
+      'speechSynthesis' in window &&
+      'SpeechSynthesisUtterance' in window
+    );
+  }
+
+
+  function speakScanner(text) {
+    if (!scannerVoiceSupported() || !text) {
+      return;
+    }
+
+    try {
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.resume();
+
+      const utterance =
+        new SpeechSynthesisUtterance(String(text));
+
+      utterance.lang = 'en-MY';
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      const voices =
+        window.speechSynthesis.getVoices();
+
+      const preferredVoice =
+        voices.find(function(voice) {
+          return String(voice.lang || '').toLowerCase() === 'en-my';
+        }) ||
+        voices.find(function(voice) {
+          return String(voice.lang || '').toLowerCase().indexOf('en-gb') === 0;
+        }) ||
+        voices.find(function(voice) {
+          return String(voice.lang || '').toLowerCase().indexOf('en') === 0;
+        });
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+      }
+
+      window.speechSynthesis.speak(utterance);
+
+    } catch (ignored) {
+      // Scanner voice must never interfere with QR scanning.
+    }
+  }
 
 
   async function startScanner() {
@@ -205,9 +258,13 @@
       );
 
       setMessage(
-        'Camera ready. Point it at the physical checkpoint QR code.',
+        'Scanning checkpoint. Point the camera at the physical checkpoint QR code.',
         ''
       );
+
+      // Camera is now running and html5-qrcode is actively searching for a QR.
+      // This is the correct moment for the scanning voice prompt.
+      speakScanner('Scanning checkpoint.');
 
     } catch (error) {
       scannerRunning = false;
